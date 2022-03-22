@@ -18,8 +18,8 @@ CREATE TABLE IF NOT EXISTS tasks
 (
     id         SERIAL PRIMARY KEY NOT NULL,
     title      VARCHAR(255),
-    created_at timestamp with time zone DEFAULT (now() at time zone 'utc'),
     project_id int4                NOT NULL,
+    created_at timestamp with time zone DEFAULT (now() at time zone 'utc'),
     FOREIGN KEY (project_id) references projects (id)
 );
 

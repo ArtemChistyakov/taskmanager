@@ -1,6 +1,6 @@
 use std::convert::Infallible;
 
-use mobc::{Pool};
+use mobc::Pool;
 use mobc_postgres::PgConnectionManager;
 use mobc_postgres::tokio_postgres::NoTls;
 use warp::{Filter, Rejection};
@@ -19,14 +19,24 @@ async fn main() {
     db::db_init(&db_pool)
         .await
         .unwrap();
-    let sm = warp::path("users")
+    let users = warp::path("users");
+    let tasks = warp::path("tasks");
+    let sm = users
+        .and(warp::get())
         .and(warp::query())
         .and(with_db(db_pool.clone()))
         .and_then(handler::get_users)
-        .or(warp::path("tasks")
-            .and(warp::query())
-            .and(with_db(db_pool.clone()))
-            .and_then(handler::get_tasks));
+        .or(
+            users.and(warp::post())
+                .and(warp::body::json())
+                .and(with_db(db_pool.clone()))
+                .and_then(handler::create_user)
+        )
+        .or(
+            tasks
+                .and(warp::query())
+                .and(with_db(db_pool.clone()))
+                .and_then(handler::get_tasks));
 
 
     warp::serve(sm).run(([127, 0, 0, 1], 8080)).await;
