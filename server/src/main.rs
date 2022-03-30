@@ -5,7 +5,6 @@ use mobc_postgres::PgConnectionManager;
 use mobc_postgres::tokio_postgres::NoTls;
 use warp::{Filter, Rejection};
 
-mod data;
 mod db;
 mod error;
 mod handler;
@@ -21,7 +20,11 @@ async fn main() {
         .unwrap();
     let users = warp::path("users");
     let tasks = warp::path("tasks");
-    let sm = users
+    let health_route = warp::path!("health")
+        .and(with_db(db_pool.clone()))
+        .and_then(handler::health_handler);
+
+    let user_routes = users
         .and(warp::get())
         .and(warp::query())
         .and(with_db(db_pool.clone()))
@@ -31,15 +34,20 @@ async fn main() {
                 .and(warp::body::json())
                 .and(with_db(db_pool.clone()))
                 .and_then(handler::create_user)
-        )
-        .or(
-            tasks
-                .and(warp::query())
-                .and(with_db(db_pool.clone()))
-                .and_then(handler::get_tasks));
+        );
+    let task_routes = tasks
+        .and(warp::query())
+        .and(with_db(db_pool.clone()))
+        .and_then(handler::get_tasks);
 
 
-    warp::serve(sm).run(([127, 0, 0, 1], 8080)).await;
+    let routes = health_route
+        .or(user_routes)
+        .or(task_routes)
+        .with(warp::cors().allow_any_origin())
+        .recover(error::handle_rejection);
+
+    warp::serve(routes).run(([127, 0, 0, 1], 8080)).await;
 }
 
 fn with_db(db_pool: DBPool) -> impl Filter<Extract=(DBPool, ), Error=Infallible> + Clone {

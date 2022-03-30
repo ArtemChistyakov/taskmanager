@@ -12,10 +12,10 @@ pub struct Pageable {
 
 #[derive(Deserialize, Serialize, Clone)]
 pub struct Task {
-   pub id: i32,
-   pub title: String,
-   pub project_id: i32,
-   pub created_at: DateTime<Utc>,
+    pub id: i32,
+    pub title: String,
+    pub project_id: i32,
+    pub created_at: DateTime<Utc>,
 }
 
 
@@ -37,9 +37,8 @@ pub struct UserRequest {
 
 #[derive(Deserialize, Serialize, Clone)]
 pub struct Project {
-   pub id: i32,
-   pub title: String,
+    pub id: i32,
+    pub title: String,
 }
-
 
 

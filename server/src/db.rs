@@ -8,7 +8,7 @@ use mobc_postgres::PgConnectionManager;
 use mobc_postgres::tokio_postgres::{Config, NoTls, Row};
 
 use crate::{DBPool, error};
-use crate::data::{Pageable, Task, User, UserRequest};
+use common::data::{Pageable, Task, User, UserRequest};
 use crate::error::Error::{DBInitError, DBPoolError, DBQueryError};
 
 const INIT_SQL: &str = "./db.sql";
