@@ -1,11 +1,10 @@
 use std::convert::Infallible;
 
 use mobc_postgres::tokio_postgres;
+use serde_derive::Serialize;
 use thiserror::Error;
 use warp::{Rejection, Reply};
 use warp::http::StatusCode;
-use serde_derive::Serialize;
-
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -17,6 +16,18 @@ pub enum Error {
     DBInitError(tokio_postgres::Error),
     #[error("error reading file: {0}")]
     ReadFileError(std::io::Error),
+    #[error("wrong credentials")]
+    WrongCredentialsError,
+    #[error("jwt token not valid")]
+    JWTTokenError,
+    #[error("jwt token creation error")]
+    JWTTokenCreationError,
+    #[error("no auth header")]
+    NoAuthHeaderError,
+    #[error("invalid auth header")]
+    InvalidAuthHeaderError,
+    #[error("no permission")]
+    NoPermissionError,
 }
 
 impl From<mobc::Error<mobc_postgres::tokio_postgres::Error>> for Error {
@@ -59,6 +70,30 @@ pub async fn handle_rejection(err: Rejection) -> std::result::Result<impl Reply,
             Error::DBQueryError(_) => {
                 code = StatusCode::BAD_REQUEST;
                 message = "Could not Execute request";
+            }
+            Error::WrongCredentialsError => {
+                code = StatusCode::BAD_REQUEST;
+                message = "Credentials not valid.";
+            }
+            Error::JWTTokenCreationError => {
+                code = StatusCode::INTERNAL_SERVER_ERROR;
+                message = "Internal Server Error";
+            }
+            Error::NoAuthHeaderError => {
+                code = StatusCode::UNAUTHORIZED;
+                message = "Unauthorized";
+            }
+            Error::InvalidAuthHeaderError => {
+                code = StatusCode::UNAUTHORIZED;
+                message = "Unauthorized";
+            }
+            Error::NoPermissionError => {
+                code = StatusCode::FORBIDDEN;
+                message = "Forbidden";
+            }
+            Error::JWTTokenError => {
+                code = StatusCode::UNAUTHORIZED;
+                message = "Unauthorized";
             }
             _ => {
                 eprintln!("unhandled application error: {:?}", err);

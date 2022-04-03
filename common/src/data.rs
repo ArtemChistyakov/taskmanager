@@ -35,10 +35,37 @@ pub struct UserRequest {
     pub email: Option<String>,
 }
 
-#[derive(Deserialize, Serialize, Clone)]
+#[derive(Serialize, Clone)]
 pub struct Project {
     pub id: i32,
     pub title: String,
+    pub created_at: DateTime<Utc>,
 }
 
+#[derive(Deserialize, Clone)]
+pub struct ProjectRequest {
+    pub title: String,
+}
+
+#[derive(Deserialize)]
+pub struct CreateProjectParam {
+    pub user_id: i32,
+}
+
+#[derive(Deserialize, Clone)]
+pub struct TaskRequest {
+    pub title: String,
+    pub project_id: i32,
+}
+
+#[derive(Deserialize)]
+pub struct LoginRequest {
+    pub email: String,
+    pub pwd: String,
+}
+
+#[derive(Serialize)]
+pub struct LoginResponse {
+    pub token: String,
+}
 

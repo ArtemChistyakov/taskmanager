@@ -1,7 +1,7 @@
 CREATE TABLE IF NOT EXISTS projects
 (
     id         SERIAL PRIMARY KEY NOT NULL,
-    title      VARCHAR(255),
+    title      VARCHAR(255)       NOT NULL,
     created_at timestamp with time zone DEFAULT (now() at time zone 'utc')
 );
 
@@ -10,15 +10,16 @@ CREATE TABLE IF NOT EXISTS users
     id         SERIAL PRIMARY KEY NOT NULL,
     first_name VARCHAR(255),
     last_name  VARCHAR(255),
-    email      VARCHAR(255),
+    email      VARCHAR(255)       NOT NULL UNIQUE,
+    password   VARCHAR(255)       NOT NULL,
     created_at timestamp with time zone DEFAULT (now() at time zone 'utc')
 );
 
 CREATE TABLE IF NOT EXISTS tasks
 (
     id         SERIAL PRIMARY KEY NOT NULL,
-    title      VARCHAR(255),
-    project_id int4                NOT NULL,
+    title      VARCHAR(255)       NOT NULL,
+    project_id int4               NOT NULL,
     created_at timestamp with time zone DEFAULT (now() at time zone 'utc'),
     FOREIGN KEY (project_id) references projects (id)
 );

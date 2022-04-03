@@ -7,13 +7,16 @@ use mobc::{Connection, Pool};
 use mobc_postgres::PgConnectionManager;
 use mobc_postgres::tokio_postgres::{Config, NoTls, Row};
 
+use common::data::{CreateProjectParam, LoginRequest, Pageable, Project, ProjectRequest, Task, TaskRequest, User, UserRequest};
+
 use crate::{DBPool, error};
-use common::data::{Pageable, Task, User, UserRequest};
+use crate::error::Error;
 use crate::error::Error::{DBInitError, DBPoolError, DBQueryError};
 
 const INIT_SQL: &str = "./db.sql";
 const USER_SELECT_FIELDS: &str = "id,first_name,last_name,email,created_at";
 const USER_INSERT_FIELDS: &str = "first_name,last_name,email";
+const TASK_INSERT_FIELDS: &str = "title,project_id";
 const USERS_TABLE_NAME: &str = "users";
 
 const TASK_SELECT_FIELDS: &str = "id,title,project_id,created_at";
@@ -47,6 +50,22 @@ pub async fn db_init(db_pool: &DBPool) -> Result<()> {
 
 pub async fn get_conn(db_pool: &DBPool) -> Result<DBCon> {
     db_pool.get().await.map_err(DBPoolError)
+}
+
+pub async fn find_user_by_email_and_pwd(db_pool: DBPool, login_request: LoginRequest) -> Result<User> {
+    let con = get_conn(&db_pool).await?;
+    let query = format!("SELECT {}  FROM {} where email = $1 and password = $2",
+                        USER_SELECT_FIELDS, USERS_TABLE_NAME
+    );
+    let opt_row = Some(con
+        .query_one(query.as_str(), &[&login_request.email, &login_request.pwd])
+        .await.map_err(DBQueryError)?);
+    match opt_row {
+        Some(row) => {
+            Ok(row_to_user(&row))
+        }
+        None => Err(Error::WrongCredentialsError)
+    }
 }
 
 pub(crate) async fn find_users(db_pool: &DBPool, pageable: Pageable) -> Result<Vec<User>> {
@@ -95,6 +114,50 @@ pub(crate) async fn create_user(db_pool: &DBPool, user_request: UserRequest) -> 
     Ok(user)
 }
 
+pub async fn create_task(db_pool: DBPool, task_request: TaskRequest) -> Result<Task> {
+    let con = get_conn(&db_pool).await?;
+    let query = format!("INSERT INTO {} ({}) VALUES ($1,$2) RETURNING {}",
+                        TASKS_TABLE_NAME,
+                        TASK_INSERT_FIELDS,
+                        TASK_SELECT_FIELDS
+    );
+    let task_row = con.query_one(query.as_str(),
+                                 &[&task_request.title, &task_request.project_id])
+        .await
+        .map_err(DBQueryError)?;
+    let task = row_to_task(&task_row);
+    Ok(task)
+}
+
+pub async fn create_project(db_pool: DBPool, param: CreateProjectParam, project_request: ProjectRequest) -> Result<Project> {
+    let con = get_conn(&db_pool).await?;
+    let query = format!("INSERT INTO {} ({}) VALUES ($1) RETURNING {}",
+                        "projects",
+                        "title",
+                        "id,title,created_at"
+    );
+    let project_row = con.query_one(query.as_str(),
+                                    &[&project_request.title])
+        .await
+        .map_err(DBQueryError)?;
+    let project = row_to_project(&project_row);
+    create_user_project_reference(&db_pool, param.user_id, project.id).await?;
+    Ok(project)
+}
+
+pub async fn create_user_project_reference(db_pool: &DBPool, user_id: i32, project_id: i32) -> Result<()> {
+    let con = get_conn(&db_pool).await?;
+    let query = format!("INSERT INTO {} ({}) VALUES ($1,$2)",
+                        "users_projects",
+                        "user_id,project_id"
+    );
+    let _number_of_rows_modified = con.execute(query.as_str(),
+                                               &[&user_id, &project_id])
+        .await
+        .map_err(DBQueryError)?;
+    Ok(())
+}
+
 fn row_to_user(row: &Row) -> User {
     let id: i32 = row.get(0);
     let first_name: Option<String> = row.get(1);
@@ -119,6 +182,17 @@ fn row_to_task(row: &Row) -> Task {
         id,
         title,
         project_id,
+        created_at,
+    }
+}
+
+fn row_to_project(row: &Row) -> Project {
+    let id: i32 = row.get(0);
+    let title: String = row.get(1);
+    let created_at: DateTime<Utc> = row.get(2);
+    Project {
+        id,
+        title,
         created_at,
     }
 }
