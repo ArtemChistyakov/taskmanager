@@ -47,10 +47,6 @@ pub struct ProjectRequest {
     pub title: String,
 }
 
-#[derive(Deserialize)]
-pub struct CreateProjectParam {
-    pub user_id: i32,
-}
 
 #[derive(Deserialize, Clone)]
 pub struct TaskRequest {
@@ -58,13 +54,13 @@ pub struct TaskRequest {
     pub project_id: i32,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize,Serialize)]
 pub struct LoginRequest {
     pub email: String,
     pub pwd: String,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize,Deserialize)]
 pub struct LoginResponse {
     pub token: String,
 }

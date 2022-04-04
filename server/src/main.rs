@@ -3,8 +3,7 @@ use std::convert::Infallible;
 use mobc::Pool;
 use mobc_postgres::PgConnectionManager;
 use mobc_postgres::tokio_postgres::NoTls;
-use warp::{Filter, header, Rejection};
-use warp::header::headers_cloned;
+use warp::{Filter, Rejection};
 
 use crate::auth::Role;
 
@@ -41,6 +40,7 @@ async fn main() {
         .and(warp::get())
         .and(warp::query())
         .and(with_db(db_pool.clone()))
+        .and(auth::with_auth(vec!(Role::Admin)))
         .and_then(handler::get_users)
         .or(
             users.and(warp::post())
@@ -52,24 +52,27 @@ async fn main() {
         .and(warp::get())
         .and(warp::query())
         .and(with_db(db_pool.clone()))
+        .and(auth::with_auth(vec!(Role::User, Role::Admin)))
         .and_then(handler::get_projects)
         .or(projects
             .and(warp::post())
-            .and(warp::query())
             .and(warp::body::json())
             .and(with_db(db_pool.clone()))
+            .and(auth::with_auth(vec!(Role::User, Role::Admin)))
             .and_then(handler::create_project));
 
     let task_routes = tasks
         .and(warp::get())
         .and(warp::query())
         .and(with_db(db_pool.clone()))
+        .and(auth::with_auth(vec!(Role::User, Role::Admin)))
         .and_then(handler::get_tasks)
         .or(
             tasks
                 .and(warp::post())
                 .and(warp::body::json())
                 .and(with_db(db_pool.clone()))
+                .and(auth::with_auth(vec!(Role::User, Role::Admin)))
                 .and_then(handler::create_task)
         );
 

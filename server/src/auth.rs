@@ -63,13 +63,14 @@ pub fn create_token(user: &User) -> Result<String, Error> {
         .map_err(|_| JWTTokenCreationError)
 }
 
-pub fn with_auth(role: Role) -> impl Filter<Extract=(String, ), Error=Rejection> + Clone {
+pub fn with_auth(roles: Vec<Role>) -> impl Filter<Extract=(i32, ), Error=Rejection> + Clone {
     header::headers_cloned()
-        .map(move |headers: HeaderMap<HeaderValue>| (role.clone(), headers))
+        .map(move |headers: HeaderMap<HeaderValue>| (roles.clone(), headers))
         .and_then(authorize)
 }
 
-async fn authorize((role, headers): (Role, HeaderMap<HeaderValue>)) -> WebResult<String> {
+
+async fn authorize((roles, headers): (Vec<Role>, HeaderMap<HeaderValue>)) -> crate::Result<i32> {
     match jwt_from_header(&headers) {
         Ok(jwt) => {
             let decoded = decode::<Claims>(
@@ -79,12 +80,9 @@ async fn authorize((role, headers): (Role, HeaderMap<HeaderValue>)) -> WebResult
             )
                 .map_err(|_| reject::custom(Error::JWTTokenError))?;
 
-            if role == Role::Admin && Role::from_str(&decoded.claims.role) != Role::Admin {
-                return Err(reject::custom(Error::NoPermissionError));
-            }
+            let assigned_role = Role::from_str(&decoded.claims.role);
 
-            if role == Role::User && (Role::from_str(&decoded.claims.role) != Role::User ||
-                Role::from_str(&decoded.claims.role) != Role::Admin) {
+            if !roles.contains(&assigned_role) {
                 return Err(reject::custom(Error::NoPermissionError));
             }
 

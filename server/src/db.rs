@@ -7,7 +7,7 @@ use mobc::{Connection, Pool};
 use mobc_postgres::PgConnectionManager;
 use mobc_postgres::tokio_postgres::{Config, NoTls, Row};
 
-use common::data::{CreateProjectParam, LoginRequest, Pageable, Project, ProjectRequest, Task, TaskRequest, User, UserRequest};
+use common::data::{LoginRequest, Pageable, Project, ProjectRequest, Task, TaskRequest, User, UserRequest};
 
 use crate::{DBPool, error};
 use crate::error::Error;
@@ -114,7 +114,8 @@ pub(crate) async fn create_user(db_pool: &DBPool, user_request: UserRequest) -> 
     Ok(user)
 }
 
-pub async fn create_task(db_pool: DBPool, task_request: TaskRequest) -> Result<Task> {
+pub async fn create_task(db_pool: DBPool, task_request: TaskRequest,
+                         user_id: i32) -> Result<Task> {
     let con = get_conn(&db_pool).await?;
     let query = format!("INSERT INTO {} ({}) VALUES ($1,$2) RETURNING {}",
                         TASKS_TABLE_NAME,
@@ -129,7 +130,7 @@ pub async fn create_task(db_pool: DBPool, task_request: TaskRequest) -> Result<T
     Ok(task)
 }
 
-pub async fn create_project(db_pool: DBPool, param: CreateProjectParam, project_request: ProjectRequest) -> Result<Project> {
+pub async fn create_project(db_pool: DBPool, project_request: ProjectRequest, user_id: i32) -> Result<Project> {
     let con = get_conn(&db_pool).await?;
     let query = format!("INSERT INTO {} ({}) VALUES ($1) RETURNING {}",
                         "projects",
@@ -141,20 +142,28 @@ pub async fn create_project(db_pool: DBPool, param: CreateProjectParam, project_
         .await
         .map_err(DBQueryError)?;
     let project = row_to_project(&project_row);
-    create_user_project_reference(&db_pool, param.user_id, project.id).await?;
+    create_user_project_reference(&db_pool, user_id, project.id).await?;
     Ok(project)
 }
 
 pub async fn create_user_project_reference(db_pool: &DBPool, user_id: i32, project_id: i32) -> Result<()> {
-    let con = get_conn(&db_pool).await?;
+    let mut con = get_conn(&db_pool).await?;
+    let transaction = con.transaction().await?;
     let query = format!("INSERT INTO {} ({}) VALUES ($1,$2)",
                         "users_projects",
                         "user_id,project_id"
     );
-    let _number_of_rows_modified = con.execute(query.as_str(),
-                                               &[&user_id, &project_id])
+    let number_of_rows_modified = transaction.execute(query.as_str(),
+                                                      &[&user_id, &project_id])
         .await
-        .map_err(DBQueryError)?;
+        .map_err(DBQueryError);
+    if let Err(db_error) = number_of_rows_modified {
+        transaction.rollback()
+            .await
+            .map_err(DBQueryError)?;
+        return Result::Err(db_error);
+    }
+    transaction.commit().await?;
     Ok(())
 }
 

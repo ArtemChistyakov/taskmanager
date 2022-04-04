@@ -2,7 +2,7 @@ use warp::{reject, Reply};
 use warp::http::StatusCode;
 use warp::reply::json;
 
-use common::data::{CreateProjectParam, LoginRequest, LoginResponse, Pageable, ProjectRequest, TaskRequest, UserRequest};
+use common::data::{LoginRequest, LoginResponse, Pageable, ProjectRequest, TaskRequest, UserRequest};
 
 use crate::{auth, db, Result};
 use crate::DBPool;
@@ -29,7 +29,7 @@ pub async fn login_handler(login_request: LoginRequest, db_pool: DBPool) -> Resu
     Ok(json(&LoginResponse { token }))
 }
 
-pub async fn get_users(pageable: Pageable, db_pool: DBPool) -> Result<impl Reply> {
+pub async fn get_users(pageable: Pageable, db_pool: DBPool,user_id:i32) -> Result<impl Reply> {
     let found_users = db::find_users(&db_pool, pageable).await
         .map_err(|e| reject::custom(e))?;
     Ok(json(
@@ -45,26 +45,30 @@ pub async fn create_user(user_request: UserRequest, db_pool: DBPool) -> Result<i
     ))
 }
 
-pub async fn get_tasks(pageable: Pageable, db_pool: DBPool) -> Result<impl Reply> {
+pub async fn get_tasks(pageable: Pageable, db_pool: DBPool,
+                       user_id: i32) -> Result<impl Reply> {
     let found_tasks = db::find_tasks(&db_pool, pageable).await
         .map_err(|e| reject::custom(e))?;
     Ok(json(&found_tasks))
 }
 
-pub async fn create_task(task_request: TaskRequest, db_pool: DBPool) -> Result<impl Reply> {
-    let created_task = db::create_task(db_pool, task_request).await
+pub async fn create_task(task_request: TaskRequest, db_pool: DBPool,
+                         user_id: i32) -> Result<impl Reply> {
+    let created_task = db::create_task(db_pool, task_request, user_id).await
         .map_err(|e| reject::custom(e))?;
     Ok(json(&created_task))
 }
 
-pub async fn get_projects(pageable: Pageable, db_pool: DBPool) -> Result<impl Reply> {
+pub async fn get_projects(pageable: Pageable, db_pool: DBPool,
+                          user_id: i32) -> Result<impl Reply> {
     let found_tasks = db::find_tasks(&db_pool, pageable).await
         .map_err(|e| reject::custom(e))?;
     Ok(json(&found_tasks))
 }
 
-pub async fn create_project(param: CreateProjectParam, project_request: ProjectRequest, db_pool: DBPool) -> Result<impl Reply> {
-    let created_project = db::create_project(db_pool, param, project_request).await
+pub async fn create_project(project_request: ProjectRequest,
+                            db_pool: DBPool, user_id: i32) -> Result<impl Reply> {
+    let created_project = db::create_project(db_pool, project_request, user_id).await
         .map_err(|e| reject::custom(e))?;
     Ok(json(&created_project))
 }
