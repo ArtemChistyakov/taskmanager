@@ -1,6 +1,9 @@
 extern crate core;
 
-use std::io;
+use std::{fs, io};
+use std::fs::File;
+use std::io::Write;
+use std::path::Path;
 use std::str::FromStr;
 
 use clap::Parser;
@@ -19,7 +22,7 @@ async fn main() {
         Command::Login => {
             let mut email = String::new();
             let mut pwd = String::new();
-            println!("Пожалуйста введите email");
+            println!("Пожалуйста введите email.");
             // считываю email
             io::stdin()
                 .read_line(&mut email)
@@ -29,7 +32,7 @@ async fn main() {
             io::stdin()
                 .read_line(&mut pwd)
                 .expect("error");
-            //получаю токен или обрабатываю ошибку
+
             trim_newline(&mut email);
             trim_newline(&mut pwd);
             let login_request = LoginRequest { email, pwd };
@@ -44,10 +47,15 @@ async fn main() {
                 .await
                 .unwrap();
 
-            println!("{:?}", login_response.token)
-            //записываю токен куда-то чтобы потом его использовать
+            let path = home::home_dir().unwrap().join(".tm");
+            if !path.exists() {
+                fs::create_dir(path.clone());
+            }
+            let path = path.join("config");
+            let mut f = File::create(path).unwrap();
+            writeln!(f, "{}", login_response.token).unwrap();
         }
-        _ => todo!("Not implemented yet")
+        _ => {}
     }
 }
 
@@ -73,6 +81,7 @@ pub enum Command {
     Get,
     Login,
 }
+
 
 impl FromStr for Command {
     type Err = Error;
