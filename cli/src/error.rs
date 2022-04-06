@@ -2,7 +2,7 @@ use std::fmt::{Display, Formatter};
 
 #[derive(Debug)]
 pub enum Error {
-    ParseArgumentsError
+    ParseArgumentsError,
 }
 
 impl Display for Error {

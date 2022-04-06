@@ -1,6 +1,6 @@
 extern crate core;
 
-use std::{fs, io};
+use std::{fs, io, process};
 use std::fs::File;
 use std::io::Write;
 use std::path::Path;
@@ -8,7 +8,7 @@ use std::str::FromStr;
 
 use clap::Parser;
 
-use common::data::{LoginRequest, LoginResponse};
+use common::data::{LoginRequest, LoginResponse, Project, ProjectRequest};
 
 use crate::error::Error;
 
@@ -18,6 +18,7 @@ mod error;
 async fn main() {
     let args: Cli = Cli::parse();
     let client = reqwest::Client::new();
+    let config_path = home::home_dir().unwrap().join(".tm").join("config");
     match args.command {
         Command::Login => {
             let mut email = String::new();
@@ -53,7 +54,72 @@ async fn main() {
             }
             let path = path.join("config");
             let mut f = File::create(path).unwrap();
-            writeln!(f, "{}", login_response.token).unwrap();
+            write!(f, "{}", login_response.token).unwrap();
+        }
+        Command::Get => {
+            let resource = args.resource.expect("Ресурс обязателен.");
+            match resource {
+                Resource::Project => {
+                    let mut token = fs::read_to_string(config_path)
+                        .unwrap_or_else(|err| {
+                            eprintln!("Problem reading config, please login.: {}", err);
+                            process::exit(1);
+                        });
+                    trim_newline(&mut token);
+
+                    let response = client.get("http://localhost:8080/projects")
+                        .bearer_auth(token)
+                        .send()
+                        .await
+                        .unwrap();
+
+                    let projects: Vec<Project> = response.json().await.unwrap();
+                    projects.iter()
+                        .for_each(|project| {
+                            println!("{}", project);
+                        });
+                }
+                _ => {}
+            }
+        }
+        Command::Create => {
+            let resource = args.resource.expect("Ресурс обязателен.");
+            match resource {
+                Resource::Project => {
+                    let mut token = fs::read_to_string(config_path)
+                        .unwrap_or_else(|err| {
+                            eprintln!("Problem reading config, please login.: {}", err);
+                            process::exit(1);
+                        });
+                    trim_newline(&mut token);
+
+                    let mut title = String::new();
+                    let mut description = String::new();
+                    println!("Пожалуйста введите название проекта.");
+                    io::stdin()
+                        .read_line(&mut title)
+                        .expect("error");
+                    println!("Пожалуйста введите описание проекта.");
+                    io::stdin()
+                        .read_line(&mut description)
+                        .expect("error");
+                    trim_newline(&mut title);
+                    trim_newline(&mut description);
+
+                    let request = ProjectRequest { title, description: Some(description) };
+                    let body = serde_json::to_string(&request).unwrap();
+                    let response = client.post("http://localhost:8080/projects")
+                        .bearer_auth(token)
+                        .body(body)
+                        .send()
+                        .await
+                        .unwrap();
+
+                    let project: Project = response.json().await.unwrap();
+                    println!("{}", project);
+                }
+                _ => {}
+            }
         }
         _ => {}
     }

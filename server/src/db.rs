@@ -5,7 +5,7 @@ use std::time::Duration;
 use chrono::{DateTime, Utc};
 use mobc::{Connection, Pool};
 use mobc_postgres::PgConnectionManager;
-use mobc_postgres::tokio_postgres::{Config, NoTls, Row};
+use mobc_postgres::tokio_postgres::{Config, NoTls, Row, Transaction};
 
 use common::data::{LoginRequest, Pageable, Project, ProjectRequest, Task, TaskRequest, User, UserRequest};
 
@@ -16,11 +16,15 @@ use crate::error::Error::{DBInitError, DBPoolError, DBQueryError};
 const INIT_SQL: &str = "./db.sql";
 const USER_SELECT_FIELDS: &str = "id,first_name,last_name,email,created_at";
 const USER_INSERT_FIELDS: &str = "first_name,last_name,email";
-const TASK_INSERT_FIELDS: &str = "title,project_id";
-const USERS_TABLE_NAME: &str = "users";
+const USERS_TABLE_NAME: &str = "app_users";
 
-const TASK_SELECT_FIELDS: &str = "id,title,project_id,created_at";
+const TASK_SELECT_FIELDS: &str = "id,title,description,user_id,project_id,created_at";
 const TASKS_TABLE_NAME: &str = "tasks";
+const TASK_INSERT_FIELDS: &str = "title,description,user_id,project_id";
+
+const PROJECT_SELECT_FIELDS: &str = "id,title,description,created_at";
+const PROJECT_TABLE_NAME: &str = "projects";
+const PROJECT_INSERT_FIELDS: &str = "title,description";
 
 type DBCon = Connection<PgConnectionManager<NoTls>>;
 type Result<T> = std::result::Result<T, error::Error>;
@@ -54,7 +58,7 @@ pub async fn get_conn(db_pool: &DBPool) -> Result<DBCon> {
 
 pub async fn find_user_by_email_and_pwd(db_pool: DBPool, login_request: LoginRequest) -> Result<User> {
     let con = get_conn(&db_pool).await?;
-    let query = format!("SELECT {}  FROM {} where email = $1 and password = $2",
+    let query = format!("SELECT {}  FROM {} where email = $1 and pwd = $2",
                         USER_SELECT_FIELDS, USERS_TABLE_NAME
     );
     let opt_row = Some(con
@@ -83,18 +87,49 @@ pub(crate) async fn find_users(db_pool: &DBPool, pageable: Pageable) -> Result<V
     Ok(users)
 }
 
-pub(crate) async fn find_tasks(db_pool: &DBPool, pageable: Pageable) -> Result<Vec<Task>> {
+pub(crate) async fn find_tasks(db_pool: &DBPool, pageable: Pageable, user_id: i32) -> Result<Vec<Task>> {
     let con = get_conn(db_pool).await?;
-    let query = format!("SELECT {}  FROM {} {} ORDER BY {} {} LIMIT {} OFFSET {}",
-                        TASK_SELECT_FIELDS, TASKS_TABLE_NAME, "",
-                        pageable.order_by.unwrap_or("id".to_string()),
-                        pageable.direction.unwrap_or("ASC".to_string()),
-                        pageable.limit.unwrap_or(10),
-                        pageable.offset.unwrap_or(0));
-    let row_tasks = con.query(query.as_str(), &[]).await.map_err(DBQueryError)?;
+    let query = get_select_query(TASK_SELECT_FIELDS,
+                                 TASKS_TABLE_NAME,
+                                 "WHERE user_id = $1",
+                                 pageable);
+    let row_tasks = con.query(query.as_str(), &[&user_id])
+        .await
+        .map_err(DBQueryError)?;
     let tasks = row_tasks.iter().map(|row_task| row_to_task(row_task))
         .collect::<Vec<Task>>();
     Ok(tasks)
+}
+
+
+fn get_select_query(select_fields: &str,
+                    table_name: &str,
+                    where_clause: &str,
+                    pageable: Pageable) -> String {
+    format!("SELECT {}  FROM {} {} ORDER BY {} {} LIMIT {} OFFSET {}",
+            select_fields,
+            table_name,
+            where_clause,
+            pageable.order_by.unwrap_or("id".to_string()),
+            pageable.direction.unwrap_or("ASC".to_string()),
+            pageable.limit.unwrap_or(10),
+            pageable.offset.unwrap_or(0))
+}
+
+pub(crate) async fn find_projects(db_pool: &DBPool,
+                                  pageable: Pageable,
+                                  user_id: i32) -> Result<Vec<Project>> {
+    let con = get_conn(db_pool).await?;
+    let query = get_select_query("p.id,p.title,p.description,p.created_at",
+                                 "projects p JOIN users_projects up ON p.id = up.project_id",
+                                 "WHERE up.user_id = $1",
+                                 pageable);
+    let row_tasks = con.query(query.as_str(), &[&user_id])
+        .await
+        .map_err(DBQueryError)?;
+    let projects = row_tasks.iter().map(|row_project| row_to_project(row_project))
+        .collect::<Vec<Project>>();
+    Ok(projects)
 }
 
 pub(crate) async fn create_user(db_pool: &DBPool, user_request: UserRequest) -> Result<User> {
@@ -117,53 +152,63 @@ pub(crate) async fn create_user(db_pool: &DBPool, user_request: UserRequest) -> 
 pub async fn create_task(db_pool: DBPool, task_request: TaskRequest,
                          user_id: i32) -> Result<Task> {
     let con = get_conn(&db_pool).await?;
-    let query = format!("INSERT INTO {} ({}) VALUES ($1,$2) RETURNING {}",
+    let query = format!("INSERT INTO {} ({}) VALUES ($1,$2,$3,$4) RETURNING {}",
                         TASKS_TABLE_NAME,
                         TASK_INSERT_FIELDS,
                         TASK_SELECT_FIELDS
     );
     let task_row = con.query_one(query.as_str(),
-                                 &[&task_request.title, &task_request.project_id])
+                                 &[&task_request.title,
+                                     &task_request.description,
+                                     &user_id,
+                                     &task_request.project_id])
         .await
         .map_err(DBQueryError)?;
     let task = row_to_task(&task_row);
     Ok(task)
 }
 
-pub async fn create_project(db_pool: DBPool, project_request: ProjectRequest, user_id: i32) -> Result<Project> {
-    let con = get_conn(&db_pool).await?;
-    let query = format!("INSERT INTO {} ({}) VALUES ($1) RETURNING {}",
-                        "projects",
-                        "title",
-                        "id,title,created_at"
+
+pub async fn create_project(db_pool: DBPool,
+                            project_request: ProjectRequest,
+                            user_id: i32) -> Result<Project> {
+    let mut connection = get_conn(&db_pool).await?;
+    let transaction = connection.transaction()
+        .await
+        .map_err(DBQueryError)?;
+    let query = format!("INSERT INTO {} ({}) VALUES ($1,$2) RETURNING {}",
+                        PROJECT_TABLE_NAME,
+                        PROJECT_INSERT_FIELDS,
+                        PROJECT_SELECT_FIELDS
     );
-    let project_row = con.query_one(query.as_str(),
-                                    &[&project_request.title])
+    let project_row = transaction.query_one(query.as_str(),
+                                            &[&project_request.title,
+                                                &project_request.description])
         .await
         .map_err(DBQueryError)?;
     let project = row_to_project(&project_row);
-    create_user_project_reference(&db_pool, user_id, project.id).await?;
+    let res = create_user_project_reference(&transaction, user_id, project.id)
+        .await;
+    if let Err(_) = res {
+        transaction.rollback()
+            .await
+            .map_err(DBQueryError)?;
+        return Err(res.err().unwrap());
+    }
+    transaction.commit()
+        .await
+        .map_err(DBQueryError)?;
     Ok(project)
 }
 
-pub async fn create_user_project_reference(db_pool: &DBPool, user_id: i32, project_id: i32) -> Result<()> {
-    let mut con = get_conn(&db_pool).await?;
-    let transaction = con.transaction().await?;
+pub async fn create_user_project_reference(transaction: &Transaction<'_>, user_id: i32, project_id: i32) -> Result<()> {
     let query = format!("INSERT INTO {} ({}) VALUES ($1,$2)",
                         "users_projects",
                         "user_id,project_id"
     );
-    let number_of_rows_modified = transaction.execute(query.as_str(),
-                                                      &[&user_id, &project_id])
+    transaction.execute(query.as_str(), &[&user_id, &project_id])
         .await
-        .map_err(DBQueryError);
-    if let Err(db_error) = number_of_rows_modified {
-        transaction.rollback()
-            .await
-            .map_err(DBQueryError)?;
-        return Result::Err(db_error);
-    }
-    transaction.commit().await?;
+        .map_err(DBQueryError)?;
     Ok(())
 }
 
@@ -185,11 +230,15 @@ fn row_to_user(row: &Row) -> User {
 fn row_to_task(row: &Row) -> Task {
     let id: i32 = row.get(0);
     let title: String = row.get(1);
-    let project_id: i32 = row.get(2);
-    let created_at: DateTime<Utc> = row.get(3);
+    let description: Option<String> = row.get(2);
+    let user_id: i32 = row.get(3);
+    let project_id: i32 = row.get(4);
+    let created_at: DateTime<Utc> = row.get(5);
     Task {
         id,
         title,
+        description,
+        user_id,
         project_id,
         created_at,
     }
@@ -198,10 +247,12 @@ fn row_to_task(row: &Row) -> Task {
 fn row_to_project(row: &Row) -> Project {
     let id: i32 = row.get(0);
     let title: String = row.get(1);
-    let created_at: DateTime<Utc> = row.get(2);
+    let description: Option<String> = row.get(2);
+    let created_at: DateTime<Utc> = row.get(3);
     Project {
         id,
         title,
+        description,
         created_at,
     }
 }

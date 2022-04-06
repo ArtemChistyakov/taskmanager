@@ -47,7 +47,8 @@ pub async fn create_user(user_request: UserRequest, db_pool: DBPool) -> Result<i
 
 pub async fn get_tasks(pageable: Pageable, db_pool: DBPool,
                        user_id: i32) -> Result<impl Reply> {
-    let found_tasks = db::find_tasks(&db_pool, pageable).await
+    let found_tasks = db::find_tasks(&db_pool, pageable,user_id)
+        .await
         .map_err(|e| reject::custom(e))?;
     Ok(json(&found_tasks))
 }
@@ -61,7 +62,7 @@ pub async fn create_task(task_request: TaskRequest, db_pool: DBPool,
 
 pub async fn get_projects(pageable: Pageable, db_pool: DBPool,
                           user_id: i32) -> Result<impl Reply> {
-    let found_tasks = db::find_tasks(&db_pool, pageable).await
+    let found_tasks = db::find_projects(&db_pool, pageable,user_id).await
         .map_err(|e| reject::custom(e))?;
     Ok(json(&found_tasks))
 }

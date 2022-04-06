@@ -1,3 +1,5 @@
+use std::fmt::{Display, Formatter};
+
 use chrono::{DateTime, Utc};
 use serde_derive::Deserialize;
 use serde_derive::Serialize;
@@ -14,10 +16,18 @@ pub struct Pageable {
 pub struct Task {
     pub id: i32,
     pub title: String,
+    pub description: Option<String>,
+    pub user_id: i32,
     pub project_id: i32,
     pub created_at: DateTime<Utc>,
 }
 
+#[derive(Deserialize, Serialize, Clone)]
+pub struct TaskRequest {
+    pub title: String,
+    pub description: Option<String>,
+    pub project_id: i32,
+}
 
 #[derive(Deserialize, Serialize, Clone)]
 pub struct User {
@@ -35,32 +45,41 @@ pub struct UserRequest {
     pub email: Option<String>,
 }
 
-#[derive(Serialize, Clone)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct Project {
     pub id: i32,
     pub title: String,
+    pub description: Option<String>,
     pub created_at: DateTime<Utc>,
 }
 
-#[derive(Deserialize, Clone)]
+impl Display for Project {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "[project: id = {},title = {}, description = {} ,created_at = {}];",
+               self.id,
+               self.title,
+               match self.description {
+                   Some(_) => self.description.as_ref().unwrap(),
+                   None => ""
+               },
+               self.created_at)
+    }
+}
+
+#[derive(Deserialize, Serialize, Clone)]
 pub struct ProjectRequest {
     pub title: String,
+    pub description: Option<String>,
 }
 
 
-#[derive(Deserialize, Clone)]
-pub struct TaskRequest {
-    pub title: String,
-    pub project_id: i32,
-}
-
-#[derive(Deserialize,Serialize)]
+#[derive(Deserialize, Serialize)]
 pub struct LoginRequest {
     pub email: String,
     pub pwd: String,
 }
 
-#[derive(Serialize,Deserialize)]
+#[derive(Serialize, Deserialize)]
 pub struct LoginResponse {
     pub token: String,
 }
