@@ -29,7 +29,7 @@ pub async fn login_handler(login_request: LoginRequest, db_pool: DBPool) -> Resu
     Ok(json(&LoginResponse { token }))
 }
 
-pub async fn get_users(pageable: Pageable, db_pool: DBPool,user_id:i32) -> Result<impl Reply> {
+pub async fn get_users(pageable: Pageable, db_pool: DBPool, user_id: i32) -> Result<impl Reply> {
     let found_users = db::find_users(&db_pool, pageable).await
         .map_err(|e| reject::custom(e))?;
     Ok(json(
@@ -47,7 +47,7 @@ pub async fn create_user(user_request: UserRequest, db_pool: DBPool) -> Result<i
 
 pub async fn get_tasks(pageable: Pageable, db_pool: DBPool,
                        user_id: i32) -> Result<impl Reply> {
-    let found_tasks = db::find_tasks(&db_pool, pageable,user_id)
+    let found_tasks = db::find_tasks(&db_pool, pageable, user_id)
         .await
         .map_err(|e| reject::custom(e))?;
     Ok(json(&found_tasks))
@@ -62,7 +62,7 @@ pub async fn create_task(task_request: TaskRequest, db_pool: DBPool,
 
 pub async fn get_projects(pageable: Pageable, db_pool: DBPool,
                           user_id: i32) -> Result<impl Reply> {
-    let found_tasks = db::find_projects(&db_pool, pageable,user_id).await
+    let found_tasks = db::find_projects(&db_pool, pageable, user_id).await
         .map_err(|e| reject::custom(e))?;
     Ok(json(&found_tasks))
 }
@@ -72,6 +72,13 @@ pub async fn create_project(project_request: ProjectRequest,
     let created_project = db::create_project(db_pool, project_request, user_id).await
         .map_err(|e| reject::custom(e))?;
     Ok(json(&created_project))
+}
+
+pub async fn delete_project(project_id: i32, db_pool: DBPool, user_id: i32) -> Result<impl Reply> {
+    db::delete_project(db_pool, project_id, user_id)
+        .await
+        .map_err(|e| reject::custom(e))?;
+    Ok(StatusCode::OK)
 }
 
 

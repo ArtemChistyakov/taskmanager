@@ -212,6 +212,41 @@ pub async fn create_user_project_reference(transaction: &Transaction<'_>, user_i
     Ok(())
 }
 
+const USERS_PROJECTS_TABLE_NAME: &str = "users_projects";
+
+pub(crate) async fn delete_project(db_pool: DBPool, project_id: i32, user_id: i32) -> Result<u64> {
+    let mut con = get_conn(&db_pool).await?;
+    let transaction = con.transaction().await.map_err(DBQueryError)?;
+    let query = format!("DELETE FROM {} \
+     WHERE user_id = $1 AND project_id= $2", USERS_PROJECTS_TABLE_NAME);
+    let res = transaction.execute(
+        query.as_str(),
+        &[&user_id, &project_id])
+        .await;
+    if let Err(e) = res {
+        transaction.rollback().await
+            .map_err(DBQueryError)?;
+        return Err(DBQueryError(e));
+    }
+    let query = format!("DELETE FROM {} \
+     WHERE id = $1", PROJECT_TABLE_NAME);
+    let res = transaction.execute(query.as_str(), &[&project_id])
+        .await;
+    return match res {
+        Err(e) => {
+            println!("{:?}", e);
+            transaction.rollback().await
+                .map_err(DBQueryError)?;
+            Err(DBQueryError(e))
+        }
+        Ok(row_count) => {
+            transaction.commit().await
+                .map_err(DBQueryError)?;
+            Ok(row_count)
+        }
+    };
+}
+
 fn row_to_user(row: &Row) -> User {
     let id: i32 = row.get(0);
     let first_name: Option<String> = row.get(1);
