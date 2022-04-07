@@ -60,6 +60,13 @@ pub async fn create_task(task_request: TaskRequest, db_pool: DBPool,
     Ok(json(&created_task))
 }
 
+pub async fn delete_task(task_id: i32, db_pool: DBPool, user_id: i32) -> Result<impl Reply> {
+    db::delete_task(db_pool, task_id, user_id)
+        .await
+        .map_err(|e| reject::custom(e))?;
+    Ok(StatusCode::OK)
+}
+
 pub async fn get_projects(pageable: Pageable, db_pool: DBPool,
                           user_id: i32) -> Result<impl Reply> {
     let found_tasks = db::find_projects(&db_pool, pageable, user_id).await

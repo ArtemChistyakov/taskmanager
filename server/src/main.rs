@@ -80,7 +80,13 @@ async fn main() {
                 .and(with_db(db_pool.clone()))
                 .and(auth::with_auth(vec!(Role::User, Role::Admin)))
                 .and_then(handler::create_task)
-        );
+        )
+        .or(tasks
+            .and(warp::delete())
+            .and(warp::path::param())
+            .and(with_db(db_pool.clone()))
+            .and(auth::with_auth(vec!(Role::User,Role::Admin)))
+            .and_then(handler::delete_task));
 
 
     let routes = health_route

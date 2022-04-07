@@ -26,6 +26,8 @@ const PROJECT_SELECT_FIELDS: &str = "id,title,description,created_at";
 const PROJECT_TABLE_NAME: &str = "projects";
 const PROJECT_INSERT_FIELDS: &str = "title,description";
 
+const USERS_PROJECTS_TABLE_NAME: &str = "users_projects";
+
 type DBCon = Connection<PgConnectionManager<NoTls>>;
 type Result<T> = std::result::Result<T, error::Error>;
 
@@ -212,7 +214,15 @@ pub async fn create_user_project_reference(transaction: &Transaction<'_>, user_i
     Ok(())
 }
 
-const USERS_PROJECTS_TABLE_NAME: &str = "users_projects";
+
+pub(crate) async fn delete_task(db_pool: DBPool, task_id: i32, user_id: i32) -> Result<u64> {
+    let mut con = get_conn(&db_pool).await?;
+    let query = format!("DELETE FROM {} \
+     WHERE id = $1", TASKS_TABLE_NAME);
+    con.execute(query.as_str(), &[&task_id])
+        .await
+        .map_err(DBQueryError)
+}
 
 pub(crate) async fn delete_project(db_pool: DBPool, project_id: i32, user_id: i32) -> Result<u64> {
     let mut con = get_conn(&db_pool).await?;
