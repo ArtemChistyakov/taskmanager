@@ -4,7 +4,7 @@ use chrono::{DateTime, Utc};
 use serde_derive::Deserialize;
 use serde_derive::Serialize;
 
-#[derive(Deserialize)]
+#[derive(Deserialize,Serialize)]
 pub struct Pageable {
     pub limit: Option<usize>,
     pub offset: Option<usize>,
@@ -62,6 +62,20 @@ impl Display for Project {
                    Some(_) => self.description.as_ref().unwrap(),
                    None => ""
                },
+               self.created_at)
+    }
+}
+
+impl Display for Task {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "[task: id = {},title = {}, description = {} ,project_id = {},created_at = {}];",
+               self.id,
+               self.title,
+               match self.description {
+                   Some(_) => self.description.as_ref().unwrap(),
+                   None => ""
+               },
+               self.project_id,
                self.created_at)
     }
 }
