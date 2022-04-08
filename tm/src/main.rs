@@ -4,16 +4,17 @@ use std::{fs, io, process};
 use std::fs::File;
 use std::io::Write;
 use std::path::Path;
-use std::str::FromStr;
 
-use clap::Parser;
+use clap::{Parser};
 use reqwest::{Response, StatusCode, Url};
 
 use common::data::{LoginRequest, LoginResponse, Pageable, Project, ProjectRequest, Task, TaskRequest};
+use crate::argument::{Cli, Command, Resource};
 
 use crate::error::Error;
 
 mod error;
+mod argument;
 
 #[tokio::main]
 async fn main() {
@@ -60,16 +61,22 @@ async fn main() {
         Command::Get => {
             let resource = args.resource.expect("Ресурс обязателен.");
             match resource {
-                Resource::Project => {
+                Resource::Project | Resource::Projects => {
                     let mut token = fs::read_to_string(config_path)
                         .unwrap_or_else(|err| {
                             eprintln!("Problem reading config, please login.: {}", err);
                             process::exit(1);
                         });
                     trim_newline(&mut token);
-
+                    let pageable = Pageable {
+                        limit: args.limit,
+                        offset: args.offset,
+                        order_by: args.order.map(|x| x.to_string()),
+                        direction: args.direction.map(|x| x.to_string()),
+                    };
                     let response = client.get("http://localhost:8080/projects")
                         .bearer_auth(token)
+                        .query(&pageable)
                         .send()
                         .await
                         .unwrap();
@@ -81,38 +88,14 @@ async fn main() {
                             println!("{}", project);
                         });
                 }
-                Resource::Task => {
+                Resource::Task | Resource::Tasks => {
                     let token = get_token(&config_path);
                     let task_url = Url::parse("http://localhost:8080/tasks").unwrap();
-                    let mut limit = String::new();
-                    let mut offset = String::new();
-                    let mut order_by = String::new();
-                    let mut direction = String::new();
-                    println!("Пожалуйста введите limit");
-                    io::stdin().read_line(&mut limit)
-                        .unwrap();
-                    println!("Пожалуйста введите offset");
-                    io::stdin().read_line(&mut offset)
-                        .unwrap();
-                    println!("Пожалуйста введите order_by");
-                    io::stdin().read_line(&mut order_by)
-                        .unwrap();
-                    println!("Пожалуйста введите direction");
-                    io::stdin().read_line(&mut direction)
-                        .unwrap();
-
-                    trim_newline(&mut limit);
-                    trim_newline(&mut offset);
-                    trim_newline(&mut order_by);
-                    trim_newline(&mut direction);
-
-                    let limit = limit.parse::<usize>().unwrap();
-                    let offset = offset.parse::<usize>().unwrap();
                     let pageable = Pageable {
-                        limit: Some(limit),
-                        offset: Some(offset),
-                        order_by: Some(order_by),
-                        direction: Some(direction),
+                        limit: args.limit,
+                        offset: args.offset,
+                        order_by: args.order.map(|x| x.to_string()),
+                        direction: args.direction.map(|x| x.to_string()),
                     };
                     let response = client.get(task_url)
                         .bearer_auth(token)
@@ -124,7 +107,7 @@ async fn main() {
 
                     let tasks: Vec<Task> = response.json().await.unwrap();
                     tasks.iter()
-                        .for_each(|task| println!("{}",task));
+                        .for_each(|task| println!("{}", task));
                 }
                 _ => {}
             }
@@ -258,53 +241,6 @@ fn trim_newline(s: &mut String) {
         s.pop();
         if s.ends_with('\r') {
             s.pop();
-        }
-    }
-}
-
-#[derive(Parser)]
-pub struct Cli {
-    command: Command,
-    resource: Option<Resource>,
-}
-
-pub enum Command {
-    Create,
-    Delete,
-    Get,
-    Login,
-}
-
-
-impl FromStr for Command {
-    type Err = Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "create" => Ok(Command::Create),
-            "delete" => Ok(Command::Delete),
-            "get" => Ok(Command::Get),
-            "login" => Ok(Command::Login),
-            _ => Err(Error::ParseArgumentsError)
-        }
-    }
-}
-
-pub enum Resource {
-    Task,
-    Project,
-    User,
-}
-
-impl FromStr for Resource {
-    type Err = Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "task" => Ok(Resource::Task),
-            "project" => Ok(Resource::Project),
-            "user" => Ok(Resource::User),
-            _ => Err(Error::ParseArgumentsError)
         }
     }
 }

@@ -163,22 +163,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "cli"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "clap",
- "common",
- "home",
- "reqwest",
- "serde",
- "serde_derive",
- "serde_json",
- "thiserror",
- "tokio 1.17.0",
-]
-
-[[package]]
 name = "common"
 version = "0.1.0"
 dependencies = [
@@ -1757,6 +1741,22 @@ name = "tinyvec_macros"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cda74da7e1a664f795bb1f8a87ec406fb89a02522cf6e50620d016add6dbbf5c"
+
+[[package]]
+name = "tm"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "clap",
+ "common",
+ "home",
+ "reqwest",
+ "serde",
+ "serde_derive",
+ "serde_json",
+ "thiserror",
+ "tokio 1.17.0",
+]
 
 [[package]]
 name = "tokio"
