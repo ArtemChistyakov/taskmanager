@@ -14,6 +14,8 @@ pub enum Error {
     DBQueryError(tokio_postgres::Error),
     #[error("error creating table: {0}")]
     DBInitError(tokio_postgres::Error),
+    #[error("error creating table")]
+    DBInitErrorTest,
     #[error("error reading file: {0}")]
     ReadFileError(std::io::Error),
     #[error("wrong credentials")]

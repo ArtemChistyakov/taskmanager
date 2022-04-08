@@ -11,14 +11,18 @@ mod auth;
 mod db;
 mod error;
 mod handler;
+mod embedded;
+mod migrations;
+mod config;
 
 type Result<T> = std::result::Result<T, Rejection>;
 type DBPool = Pool<PgConnectionManager<NoTls>>;
 
 #[tokio::main]
 async fn main() {
-    let db_pool = db::create_pool().unwrap();
-    db::db_init(&db_pool)
+    let config = config::from_env();
+    let db_pool = db::create_pool(&config).unwrap();
+    db::db_init(&config)
         .await
         .unwrap();
     let login = warp::path("login");
@@ -64,7 +68,7 @@ async fn main() {
             .and(warp::delete())
             .and(warp::path::param())
             .and(with_db(db_pool.clone()))
-            .and(auth::with_auth(vec!(Role::User,Role::Admin)))
+            .and(auth::with_auth(vec!(Role::User, Role::Admin)))
             .and_then(handler::delete_project));
 
     let task_routes = tasks
@@ -85,7 +89,7 @@ async fn main() {
             .and(warp::delete())
             .and(warp::path::param())
             .and(with_db(db_pool.clone()))
-            .and(auth::with_auth(vec!(Role::User,Role::Admin)))
+            .and(auth::with_auth(vec!(Role::User, Role::Admin)))
             .and_then(handler::delete_task));
 
 

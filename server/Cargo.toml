@@ -6,10 +6,10 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-tokio = { version = "0.2", features = ["macros"] }
-warp = "0.2"
-mobc-postgres = { version = "0.5", features = ["with-chrono-0_4"] }
-mobc = "0.5"
+tokio = { version = "1.17.0", features = ["macros"] }
+warp = "0.3.2"
+mobc-postgres = { version = "0.7.0", features = ["with-chrono-0_4"] }
+mobc = "0.7.3"
 serde = { version = "1.0", features = ["derive"] }
 serde_derive = "1.0"
 serde_json = "1.0"
@@ -17,3 +17,6 @@ thiserror = "1.0"
 chrono = { version = "0.4", features = ["serde"] }
 common = { path = "../common" }
 jsonwebtoken = "7.2"
+barrel = { version = "0.7.0", features = ["pg"] }
+refinery = { version = "0.8", features = ["tokio-postgres"] }
+dotenv = "0.15.0"

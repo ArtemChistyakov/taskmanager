@@ -1,4 +1,4 @@
-use std::fs;
+use std::env;
 use std::str::FromStr;
 use std::time::Duration;
 
@@ -6,14 +6,14 @@ use chrono::{DateTime, Utc};
 use mobc::{Connection, Pool};
 use mobc_postgres::PgConnectionManager;
 use mobc_postgres::tokio_postgres::{Config, NoTls, Row, Transaction};
+use refinery::config::ConfigDbType;
 
 use common::data::{LoginRequest, Pageable, Project, ProjectRequest, Task, TaskRequest, User, UserRequest};
 
-use crate::{DBPool, error};
+use crate::{DBPool, embedded, error};
 use crate::error::Error;
-use crate::error::Error::{DBInitError, DBPoolError, DBQueryError};
+use crate::error::Error::{DBInitError, DBInitErrorTest, DBPoolError, DBQueryError};
 
-const INIT_SQL: &str = "./db.sql";
 const USER_SELECT_FIELDS: &str = "id,first_name,last_name,email,created_at";
 const USER_INSERT_FIELDS: &str = "first_name,last_name,email";
 const USERS_TABLE_NAME: &str = "app_users";
@@ -31,11 +31,14 @@ const USERS_PROJECTS_TABLE_NAME: &str = "users_projects";
 type DBCon = Connection<PgConnectionManager<NoTls>>;
 type Result<T> = std::result::Result<T, error::Error>;
 
-pub fn create_pool() -> Result<DBPool> {
-    let mut config = Config::from_str("postgres://postgres@127.0.0.1:5432/postgres")?;
-    config.user("admin");
-    config.password("admin");
-    let manager = PgConnectionManager::new(config, NoTls);
+pub fn create_pool(config: &crate::config::Config) -> Result<DBPool> {
+    let mut pool_config = Config::new()
+        .password(&config.postgres_password)
+        .user(&config.postgres_password)
+        .host(&config.postgres_host)
+        .port(config.postgres_port)
+        .dbname(&config.dbname)?;
+    let manager = PgConnectionManager::new(pool_config, NoTls);
     Ok(
         Pool::builder()
             .max_open(20)
@@ -45,12 +48,22 @@ pub fn create_pool() -> Result<DBPool> {
     )
 }
 
-pub async fn db_init(db_pool: &DBPool) -> Result<()> {
-    let init_sql = fs::read_to_string(INIT_SQL)?;
-    let connection = db_pool.get().await?;
-    connection.batch_execute(init_sql.as_str())
+
+pub async fn db_init(config: &crate::config::Config) -> Result<()> {
+    let mut init_config = refinery::config::Config::new(ConfigDbType::Postgres)
+        .set_db_host(&config.postgres_host)
+        .set_db_name(&config.dbname)
+        .set_db_port(&config.postgres_port.to_string())
+        .set_db_user(&config.postgres_username)
+        .set_db_pass(&config.postgres_password);
+
+    embedded::migrations::runner()
+        .run_async(&mut init_config)
         .await
-        .map_err(DBInitError)?;
+        .map_err(|x| {
+            println!("{:?}", x);
+            DBInitErrorTest
+        })?;
     Ok(())
 }
 
@@ -216,7 +229,7 @@ pub async fn create_user_project_reference(transaction: &Transaction<'_>, user_i
 
 
 pub(crate) async fn delete_task(db_pool: DBPool, task_id: i32, user_id: i32) -> Result<u64> {
-    let mut con = get_conn(&db_pool).await?;
+    let con = get_conn(&db_pool).await?;
     let query = format!("DELETE FROM {} \
      WHERE id = $1", TASKS_TABLE_NAME);
     con.execute(query.as_str(), &[&task_id])
