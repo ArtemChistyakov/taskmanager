@@ -1,21 +1,20 @@
-use std::env;
-use std::str::FromStr;
 use std::time::Duration;
 
+use bcrypt::DEFAULT_COST;
 use chrono::{DateTime, Utc};
 use mobc::{Connection, Pool};
 use mobc_postgres::PgConnectionManager;
 use mobc_postgres::tokio_postgres::{Config, NoTls, Row, Transaction};
 use refinery::config::ConfigDbType;
 
-use common::data::{LoginRequest, Pageable, Project, ProjectRequest, Task, TaskRequest, User, UserRequest};
+use common::data::{Pageable, Project, ProjectRequest, Task, TaskRequest, User, UserRequest};
 
 use crate::{DBPool, embedded, error};
 use crate::error::Error;
-use crate::error::Error::{DBInitError, DBInitErrorTest, DBPoolError, DBQueryError};
+use crate::error::Error::{DBInitError, DBInitErrorTest, DBPoolError, DBQueryError, EncryptPasswordError, WrongCredentialsError};
 
-const USER_SELECT_FIELDS: &str = "id,first_name,last_name,email,created_at";
-const USER_INSERT_FIELDS: &str = "first_name,last_name,email";
+const USER_SELECT_FIELDS: &str = "id,first_name,last_name,email,pwd,created_at";
+const USER_INSERT_FIELDS: &str = "first_name,last_name,email,pwd";
 const USERS_TABLE_NAME: &str = "app_users";
 
 const TASK_SELECT_FIELDS: &str = "id,title,description,user_id,project_id,created_at";
@@ -32,12 +31,13 @@ type DBCon = Connection<PgConnectionManager<NoTls>>;
 type Result<T> = std::result::Result<T, error::Error>;
 
 pub fn create_pool(config: &crate::config::Config) -> Result<DBPool> {
-    let mut pool_config = Config::new()
-        .password(&config.postgres_password)
+    let mut pool_config = Config::new();
+    pool_config.password(&config.postgres_password)
         .user(&config.postgres_password)
         .host(&config.postgres_host)
         .port(config.postgres_port)
-        .dbname(&config.dbname)?;
+        .dbname(&config.dbname);
+
     let manager = PgConnectionManager::new(pool_config, NoTls);
     Ok(
         Pool::builder()
@@ -71,21 +71,20 @@ pub async fn get_conn(db_pool: &DBPool) -> Result<DBCon> {
     db_pool.get().await.map_err(DBPoolError)
 }
 
-pub async fn find_user_by_email_and_pwd(db_pool: DBPool, login_request: LoginRequest) -> Result<User> {
+
+pub async fn find_user_by_email(db_pool: DBPool, email: &str) -> Result<User> {
     let con = get_conn(&db_pool).await?;
-    let query = format!("SELECT {}  FROM {} where email = $1 and pwd = $2",
+    let query = format!("SELECT {}  FROM {} where email = $1",
                         USER_SELECT_FIELDS, USERS_TABLE_NAME
     );
-    let opt_row = Some(con
-        .query_one(query.as_str(), &[&login_request.email, &login_request.pwd])
-        .await.map_err(DBQueryError)?);
-    match opt_row {
-        Some(row) => {
-            Ok(row_to_user(&row))
-        }
-        None => Err(Error::WrongCredentialsError)
-    }
+
+    let row = con
+        .query_one(query.as_str(), &[&email])
+        .await
+        .map_err(|_| WrongCredentialsError)?;
+    Ok(row_to_user(&row))
 }
+
 
 pub(crate) async fn find_users(db_pool: &DBPool, pageable: Pageable) -> Result<Vec<User>> {
     let con = get_conn(db_pool).await?;
@@ -148,16 +147,19 @@ pub(crate) async fn find_projects(db_pool: &DBPool,
 }
 
 pub(crate) async fn create_user(db_pool: &DBPool, user_request: UserRequest) -> Result<User> {
-    let con = get_conn(db_pool).await?;
-    let query = format!("INSERT INTO {} ({}) VALUES ($1,$2,$3) RETURNING {}",
+    let query = format!("INSERT INTO {} ({}) VALUES ($1,$2,$3,$4) RETURNING {}",
                         USERS_TABLE_NAME,
                         USER_INSERT_FIELDS,
                         USER_SELECT_FIELDS
     );
+    let encrypted_pwd = bcrypt::hash(user_request.pwd, DEFAULT_COST)
+        .map_err(EncryptPasswordError)?;
+    let con = get_conn(db_pool).await?;
     let user_row = con
         .query_one(query.as_str(), &[&user_request.first_name,
             &user_request.last_name,
-            &user_request.email])
+            &user_request.email,
+            &encrypted_pwd])
         .await
         .map_err(DBQueryError)?;
     let user = row_to_user(&user_row);
@@ -274,13 +276,15 @@ fn row_to_user(row: &Row) -> User {
     let id: i32 = row.get(0);
     let first_name: Option<String> = row.get(1);
     let last_name: Option<String> = row.get(2);
-    let email: Option<String> = row.get(3);
-    let created_at: DateTime<Utc> = row.get(4);
+    let email: String = row.get(3);
+    let pwd: String = row.get(4);
+    let created_at: DateTime<Utc> = row.get(5);
     User {
         id,
         first_name,
         last_name,
         email,
+        pwd,
         created_at,
     }
 }

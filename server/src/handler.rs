@@ -2,11 +2,11 @@ use warp::{reject, Reply};
 use warp::http::StatusCode;
 use warp::reply::json;
 
-use common::data::{LoginRequest, LoginResponse, Pageable, ProjectRequest, TaskRequest, UserRequest};
+use common::data::{LoginRequest, LoginResponse, Pageable, ProjectRequest, TaskRequest, User, UserDto, UserRequest};
 
 use crate::{auth, db, Result};
 use crate::DBPool;
-use crate::error::Error::DBQueryError;
+use crate::error::Error::{DBQueryError, EncryptPasswordError, VerifyPasswordError, WrongCredentialsError};
 
 pub async fn health_handler(db_pool: DBPool) -> Result<impl Reply> {
     let db = db::get_conn(&db_pool)
@@ -19,11 +19,14 @@ pub async fn health_handler(db_pool: DBPool) -> Result<impl Reply> {
 }
 
 pub async fn login_handler(login_request: LoginRequest, db_pool: DBPool) -> Result<impl Reply> {
-    // check password
-    let user = db::find_user_by_email_and_pwd(db_pool, login_request)
+    let user = db::find_user_by_email(db_pool, &login_request.email)
         .await
         .map_err(|e| reject::custom(e))?;
-    //generate token
+    let is_right_pwd = bcrypt::verify(login_request.pwd, &user.pwd)
+        .map_err(|e| reject::custom(VerifyPasswordError(e)))?;
+    if !is_right_pwd {
+        return Err(reject::custom(WrongCredentialsError));
+    }
     let token = auth::create_token(&user)
         .map_err(|e| reject::custom(e))?;
     Ok(json(&LoginResponse { token }))
@@ -32,16 +35,20 @@ pub async fn login_handler(login_request: LoginRequest, db_pool: DBPool) -> Resu
 pub async fn get_users(pageable: Pageable, db_pool: DBPool, user_id: i32) -> Result<impl Reply> {
     let found_users = db::find_users(&db_pool, pageable).await
         .map_err(|e| reject::custom(e))?;
+    let dtos = found_users.into_iter()
+        .map(Into::into)
+        .collect::<Vec<UserDto>>();
     Ok(json(
-        &found_users
+        &dtos
     ))
 }
 
 pub async fn create_user(user_request: UserRequest, db_pool: DBPool) -> Result<impl Reply> {
     let created_user = db::create_user(&db_pool, user_request).await
         .map_err(|e| reject::custom(e))?;
+    let dto: UserDto = created_user.into();
     Ok(json(
-        &created_user
+        &dto
     ))
 }
 

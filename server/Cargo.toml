@@ -20,3 +20,4 @@ jsonwebtoken = "7.2"
 barrel = { version = "0.7.0", features = ["pg"] }
 refinery = { version = "0.8", features = ["tokio-postgres"] }
 dotenv = "0.15.0"
+bcrypt = "0.12"

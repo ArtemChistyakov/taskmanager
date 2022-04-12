@@ -15,16 +15,14 @@ pub fn migration() -> String {
         t.add_column("first_name", types::varchar(255).nullable(true));
         t.add_column("last_name", types::varchar(255).nullable(true));
         t.add_column("pwd", types::varchar(255).nullable(false));
-        t.add_column("created_at", types::datetime()
-            .default(WrappedDefault::Function(AutogenFunction::CurrentTimestamp)));
+        t.add_column("created_at", types::custom("timestamp with time zone DEFAULT (now() at time zone 'utc')"));
     });
 
     m.create_table("projects", |t| {
         t.add_column("id", types::serial().primary(true));
         t.add_column("title", types::varchar(255).nullable(false));
         t.add_column("description", types::varchar(255).nullable(true));
-        t.add_column("created_at", types::datetime()
-            .default(WrappedDefault::Function(AutogenFunction::CurrentTimestamp)));
+        t.add_column("created_at", types::custom("timestamp with time zone DEFAULT (now() at time zone 'utc')"));
     });
 
     m.create_table("tasks", |t| {
@@ -33,8 +31,7 @@ pub fn migration() -> String {
         t.add_column("description", types::varchar(255).nullable(true));
         t.add_column("user_id", types::integer().nullable(false));
         t.add_column("project_id", types::integer().nullable(true));
-        t.add_column("created_at", types::datetime()
-            .default(WrappedDefault::Function(AutogenFunction::CurrentTimestamp)));
+        t.add_column("created_at", types::custom("timestamp with time zone DEFAULT (now() at time zone 'utc')"));
         t.add_foreign_key(&["user_id"], "app_users", &["id"]);
         t.add_foreign_key(&["project_id"], "projects", &["id"]);
     });

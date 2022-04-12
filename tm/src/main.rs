@@ -5,13 +5,12 @@ use std::fs::File;
 use std::io::Write;
 use std::path::Path;
 
-use clap::{Parser};
+use clap::Parser;
 use reqwest::{Response, StatusCode, Url};
 
 use common::data::{LoginRequest, LoginResponse, Pageable, Project, ProjectRequest, Task, TaskRequest};
-use crate::argument::{Cli, Command, Resource};
 
-use crate::error::Error;
+use crate::argument::{Cli, Command, Resource};
 
 mod error;
 mod argument;

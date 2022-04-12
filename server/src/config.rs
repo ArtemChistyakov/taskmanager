@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::env;
 
 use dotenv::dotenv;
@@ -13,7 +12,7 @@ pub struct Config {
 
 pub fn from_env() -> Config {
     dotenv().ok();
-    let environment = Environment::active().expect("No environment found");
+    // let environment = Environment::active().expect("No environment found");
 
     let postgres_port = env::var("POSTGRES_PORT")
         .unwrap_or_else(|_| "5432".to_string())

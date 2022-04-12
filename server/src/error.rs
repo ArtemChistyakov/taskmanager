@@ -16,6 +16,10 @@ pub enum Error {
     DBInitError(tokio_postgres::Error),
     #[error("error creating table")]
     DBInitErrorTest,
+    #[error("error encrypt password: {0}")]
+    EncryptPasswordError(bcrypt::BcryptError),
+    #[error("error verify password: {0}")]
+    VerifyPasswordError(bcrypt::BcryptError),
     #[error("error reading file: {0}")]
     ReadFileError(std::io::Error),
     #[error("wrong credentials")]

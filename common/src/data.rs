@@ -4,7 +4,7 @@ use chrono::{DateTime, Utc};
 use serde_derive::Deserialize;
 use serde_derive::Serialize;
 
-#[derive(Deserialize,Serialize)]
+#[derive(Deserialize, Serialize)]
 pub struct Pageable {
     pub limit: Option<usize>,
     pub offset: Option<usize>,
@@ -29,20 +29,44 @@ pub struct TaskRequest {
     pub project_id: i32,
 }
 
-#[derive(Deserialize, Serialize, Clone)]
+#[derive(Deserialize, Serialize)]
 pub struct User {
     pub id: i32,
     pub first_name: Option<String>,
     pub last_name: Option<String>,
-    pub email: Option<String>,
+    pub email: String,
+    pub pwd: String,
     pub created_at: DateTime<Utc>,
+}
+
+#[derive(Deserialize, Serialize)]
+pub struct UserDto {
+    pub id: i32,
+    pub first_name: Option<String>,
+    pub last_name: Option<String>,
+    pub email: String,
+    pub created_at: DateTime<Utc>,
+}
+
+
+impl Into<UserDto> for User {
+    fn into(self) -> UserDto {
+        UserDto {
+            id: self.id,
+            first_name: self.first_name,
+            last_name: self.last_name,
+            email: self.email,
+            created_at: self.created_at,
+        }
+    }
 }
 
 #[derive(Deserialize)]
 pub struct UserRequest {
     pub first_name: Option<String>,
     pub last_name: Option<String>,
-    pub email: Option<String>,
+    pub email: String,
+    pub pwd: String,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
