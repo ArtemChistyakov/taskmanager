@@ -6,16 +6,22 @@ use mobc::{Connection, Pool};
 use mobc_postgres::PgConnectionManager;
 use mobc_postgres::tokio_postgres::{Config, NoTls, Row, Transaction};
 use refinery::config::ConfigDbType;
+use uuid::Uuid;
 
 use common::data::{Pageable, Project, ProjectRequest, Task, TaskRequest, User, UserRequest};
 
 use crate::{DBPool, embedded, error};
+use crate::data::VerificationToken;
 use crate::error::Error;
 use crate::error::Error::{DBInitError, DBInitErrorTest, DBPoolError, DBQueryError, EncryptPasswordError, WrongCredentialsError};
 
-const USER_SELECT_FIELDS: &str = "id,first_name,last_name,email,pwd,created_at";
+const USER_SELECT_FIELDS: &str = "id,first_name,last_name,email,pwd,ebabled,created_at";
 const USER_INSERT_FIELDS: &str = "first_name,last_name,email,pwd";
 const USERS_TABLE_NAME: &str = "app_users";
+
+const TOKENS_SELECT_FIELDS: &str = "id,user_id,token,expiry_date";
+const TOKENS_INSERT_FIELDS: &str = "user_id,token,expiry_date";
+const TOKENS_TABLE_NAME: &str = "verification_tokens";
 
 const TASK_SELECT_FIELDS: &str = "id,title,description,user_id,project_id,created_at";
 const TASKS_TABLE_NAME: &str = "tasks";
@@ -146,24 +152,48 @@ pub(crate) async fn find_projects(db_pool: &DBPool,
     Ok(projects)
 }
 
-pub(crate) async fn create_user(db_pool: &DBPool, user_request: UserRequest) -> Result<User> {
-    let query = format!("INSERT INTO {} ({}) VALUES ($1,$2,$3,$4) RETURNING {}",
-                        USERS_TABLE_NAME,
-                        USER_INSERT_FIELDS,
-                        USER_SELECT_FIELDS
+pub(crate) async fn create_user_and_verification_token(db_pool: &DBPool,
+                                                       user_request: UserRequest) -> Result<(User, VerificationToken)> {
+    let create_user_query = format!("INSERT INTO {} ({}) VALUES ($1,$2,$3,$4) RETURNING {}",
+                                    USERS_TABLE_NAME,
+                                    USER_INSERT_FIELDS,
+                                    USER_SELECT_FIELDS
     );
+    let create_token_query =
+        format!("INSERT INTO {} ({})  VALUES ($1,$2,$3) RETURNING {}",
+                TOKENS_TABLE_NAME,
+                TOKENS_INSERT_FIELDS,
+                TOKENS_SELECT_FIELDS);
     let encrypted_pwd = bcrypt::hash(user_request.pwd, DEFAULT_COST)
         .map_err(EncryptPasswordError)?;
-    let con = get_conn(db_pool).await?;
-    let user_row = con
-        .query_one(query.as_str(), &[&user_request.first_name,
+    let mut con = get_conn(db_pool).await?;
+    let transaction = con.transaction().await
+        .map_err(DBQueryError)?;
+    let user_row = transaction
+        .query_one(create_user_query.as_str(), &[&user_request.first_name,
             &user_request.last_name,
             &user_request.email,
             &encrypted_pwd])
         .await
-        .map_err(DBQueryError)?;
+        .map_err(DBQueryError);
+    if let Err(e) = user_row {
+        transaction.rollback();
+        return Err(e);
+    }
+    let user_row = user_row.unwrap();
     let user = row_to_user(&user_row);
-    Ok(user)
+    let expiry_date = chrono::offset::Utc::now() + chrono::Duration::minutes(30);
+    let token_value = Uuid::new_v4().to_string();
+    let verification_token_row = transaction.query_one(create_token_query.as_str(),
+                                                       &[&user.id, &token_value, &expiry_date]).await;
+    if let Err(e) = verification_token_row {
+        transaction.rollback().await.map_err(DBQueryError)?;
+        return Err(DBQueryError(e));
+    }
+    let verification_token_row = verification_token_row.unwrap();
+    let verification_token = row_to_token(&verification_token_row);
+    transaction.commit().await.map_err(DBQueryError)?;
+    Ok((user, verification_token))
 }
 
 pub async fn create_task(db_pool: DBPool, task_request: TaskRequest,
@@ -278,13 +308,15 @@ fn row_to_user(row: &Row) -> User {
     let last_name: Option<String> = row.get(2);
     let email: String = row.get(3);
     let pwd: String = row.get(4);
-    let created_at: DateTime<Utc> = row.get(5);
+    let enabled: bool = row.get(5);
+    let created_at: DateTime<Utc> = row.get(6);
     User {
         id,
         first_name,
         last_name,
         email,
         pwd,
+        enabled,
         created_at,
     }
 }
@@ -316,5 +348,18 @@ fn row_to_project(row: &Row) -> Project {
         title,
         description,
         created_at,
+    }
+}
+
+fn row_to_token(row: &Row) -> VerificationToken {
+    let id: i32 = row.get(0);
+    let user_id: i32 = row.get(1);
+    let token: String = row.get(2);
+    let expiry_date: DateTime<Utc> = row.get(3);
+    VerificationToken {
+        id,
+        user_id,
+        token,
+        expiry_date,
     }
 }

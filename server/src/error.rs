@@ -34,6 +34,10 @@ pub enum Error {
     InvalidAuthHeaderError,
     #[error("no permission")]
     NoPermissionError,
+    #[error("user not activated")]
+    UserNotEnabledError,
+    #[error("error send notification")]
+    NotificationError,
 }
 
 impl From<mobc::Error<mobc_postgres::tokio_postgres::Error>> for Error {
@@ -100,6 +104,10 @@ pub async fn handle_rejection(err: Rejection) -> std::result::Result<impl Reply,
             Error::JWTTokenError => {
                 code = StatusCode::UNAUTHORIZED;
                 message = "Unauthorized";
+            }
+            Error::UserNotEnabledError => {
+                code = StatusCode::BAD_REQUEST;
+                message = "User not enabled"
             }
             _ => {
                 eprintln!("unhandled application error: {:?}", err);

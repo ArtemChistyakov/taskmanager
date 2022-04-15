@@ -1,10 +1,5 @@
-use std::time::SystemTime;
-
 use barrel::{Migration, types};
 use barrel::backend::Pg;
-use barrel::functions::AutogenFunction;
-use barrel::types::WrappedDefault;
-use mobc_postgres::tokio_postgres::types::ToSql;
 
 pub fn migration() -> String {
     let mut m = Migration::new();

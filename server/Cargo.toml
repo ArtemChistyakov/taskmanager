@@ -21,3 +21,4 @@ barrel = { version = "0.7.0", features = ["pg"] }
 refinery = { version = "0.8", features = ["tokio-postgres"] }
 dotenv = "0.15.0"
 bcrypt = "0.12"
+uuid = {version = "0.8",features = ["v4"]}

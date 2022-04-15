@@ -4,9 +4,9 @@ use warp::reply::json;
 
 use common::data::{LoginRequest, LoginResponse, Pageable, ProjectRequest, TaskRequest, User, UserDto, UserRequest};
 
-use crate::{auth, db, Result};
+use crate::{auth, db, notification, Result};
 use crate::DBPool;
-use crate::error::Error::{DBQueryError, EncryptPasswordError, VerifyPasswordError, WrongCredentialsError};
+use crate::error::Error::*;
 
 pub async fn health_handler(db_pool: DBPool) -> Result<impl Reply> {
     let db = db::get_conn(&db_pool)
@@ -22,6 +22,9 @@ pub async fn login_handler(login_request: LoginRequest, db_pool: DBPool) -> Resu
     let user = db::find_user_by_email(db_pool, &login_request.email)
         .await
         .map_err(|e| reject::custom(e))?;
+    if !user.enabled {
+        return Err(reject::custom(UserNotEnabledError));
+    }
     let is_right_pwd = bcrypt::verify(login_request.pwd, &user.pwd)
         .map_err(|e| reject::custom(VerifyPasswordError(e)))?;
     if !is_right_pwd {
@@ -43,10 +46,13 @@ pub async fn get_users(pageable: Pageable, db_pool: DBPool, user_id: i32) -> Res
     ))
 }
 
-pub async fn create_user(user_request: UserRequest, db_pool: DBPool) -> Result<impl Reply> {
-    let created_user = db::create_user(&db_pool, user_request).await
+pub async fn register_user(user_request: UserRequest, db_pool: DBPool) -> Result<impl Reply> {
+    let (created_user, verification_token) = db::create_user_and_verification_token(&db_pool, user_request)
+        .await
         .map_err(|e| reject::custom(e))?;
     let dto: UserDto = created_user.into();
+    notification::send_registration_email(&verification_token)
+        .map_err(|e| reject::custom(NotificationError))?;
     Ok(json(
         &dto
     ))

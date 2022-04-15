@@ -36,6 +36,7 @@ pub struct User {
     pub last_name: Option<String>,
     pub email: String,
     pub pwd: String,
+    pub enabled: bool,
     pub created_at: DateTime<Utc>,
 }
 

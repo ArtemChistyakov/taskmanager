@@ -14,6 +14,8 @@ mod handler;
 mod embedded;
 mod migrations;
 mod config;
+mod data;
+mod notification;
 
 type Result<T> = std::result::Result<T, Rejection>;
 type DBPool = Pool<PgConnectionManager<NoTls>>;
@@ -25,6 +27,8 @@ async fn main() {
     db::db_init(&config)
         .await
         .unwrap();
+
+    let registration = warp::path("registration");
     let login = warp::path("login");
     let users = warp::path("users");
     let projects = warp::path("projects");
@@ -33,6 +37,12 @@ async fn main() {
     let health_route = warp::path!("health")
         .and(with_db(db_pool.clone()))
         .and_then(handler::health_handler);
+
+    let registration_route = registration
+        .and(warp::post())
+        .and(warp::body::json())
+        .and(with_db(db_pool.clone()))
+        .and_then(handler::register_user);
 
     let login_route = login
         .and(warp::post())
@@ -45,13 +55,8 @@ async fn main() {
         .and(warp::query())
         .and(with_db(db_pool.clone()))
         .and(auth::with_auth(vec!(Role::Admin)))
-        .and_then(handler::get_users)
-        .or(
-            users.and(warp::post())
-                .and(warp::body::json())
-                .and(with_db(db_pool.clone()))
-                .and_then(handler::create_user)
-        );
+        .and_then(handler::get_users);
+
     let project_routes = projects
         .and(warp::get())
         .and(warp::query())
@@ -94,6 +99,7 @@ async fn main() {
 
 
     let routes = health_route
+        .or(registration_route)
         .or(login_route)
         .or(user_routes)
         .or(task_routes)
